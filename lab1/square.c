@@ -52,6 +52,18 @@ void init_array_from_file()
     fclose(file);
 }
 
+void check_result()
+{
+    for (int i = 0; i < ARR_SIZE; i++)
+    {
+        if (array[i] * array[i] != thread_array[i])
+        {
+            printf("Error at index %d. The thread may have calculated it incorrectly.\n", i);
+            return;
+        }
+    }
+}
+
 void copy_array_to_thread_array()
 {
     for (int i = 0; i < ARR_SIZE; i++)
@@ -84,6 +96,8 @@ int main(void)
     }
 
     print_array();
+
+    check_result();
 
     pthread_exit(NULL);
 
