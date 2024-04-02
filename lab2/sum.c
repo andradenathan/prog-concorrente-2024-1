@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
     float result = 0;
 
     float *concurrent_result;
-    float sequential_result;
+    float sequential_result = 0;
 
     if (argc < 2)
     {
@@ -126,11 +126,19 @@ int main(int argc, char *argv[])
         result += *concurrent_result;
     }
 
+    if (n % n_threads)
+    {
+        printf("Processando os dados restantes...\n");
+        for (int i = n - (n % n_threads); i < n; i++)
+            result += arr[i];
+    }
+
     printf("Resultado da soma sequencial: %f\n", sequential_result);
     printf("Resultado da soma concorrente: %f\n", result);
 
     free(arr);
     free(tid);
     free(concurrent_result);
+
     return 0;
 }
