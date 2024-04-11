@@ -3,8 +3,15 @@
 #include <stdbool.h>
 #include <string.h>
 #include <pthread.h>
-#include "./timer.h"
+#include "timer.h"
 
+/*
+    Estrutura de matriz para armazenar a matriz e as linhas e colunas.
+    Criada com o objetivo de facilitar a passagem por parâmetro entre as funções.
+
+    Optei por essa forma de implementação pois estava tendo alguns problemas de
+    acesso à memória com o uso somente de float** matrix.
+*/
 typedef struct
 {
     int row;
@@ -14,15 +21,42 @@ typedef struct
 
 t_matrix *A;
 t_matrix *B;
-
 t_matrix *C;
-
 t_matrix *sequential_matrix;
-
 FILE *file;
 
-void multiply_concurrent_matrix()
+int n_threads;
+
+void *multiply_concurrent_matrix(void *arg)
 {
+    int thread_id = *(int *)arg;
+    for (int i = thread_id; i < A->row; i += n_threads)
+    {
+        for (int j = 0; j < B->col; j++)
+        {
+            for (int k = 0; k < A->row; k++)
+            {
+                C->matrix[i][j] += A->matrix[i][k] * B->matrix[k][j];
+            }
+        }
+    }
+
+    pthread_exit(NULL);
+}
+
+void print_matrix(char *filename, t_matrix *matrix)
+{
+    file = fopen("output", "w");
+    for (int i = 0; i < matrix->row; i++)
+    {
+        for (int j = 0; j < matrix->col; j++)
+        {
+            fprintf(stdout, "%.6f ", matrix->matrix[i][j]);
+        }
+        fprintf(stdout, "\n");
+    }
+
+    fclose(file);
 }
 
 void multiply_sequential_matrix()
@@ -92,6 +126,10 @@ void init_matrix(char *filename, t_matrix *matrix)
     return;
 }
 
+/*
+    Função para alocar memória para as matrizes
+    A (arquivo 1), B (arquivo 2) e C (resultado)
+*/
 void allocate_mem_matrix()
 {
     sequential_matrix = (t_matrix *)malloc(sizeof(t_matrix));
@@ -116,10 +154,19 @@ void allocate_mem_matrix()
         printf("Erro: não foi possível alocar memória para a matriz B.\n");
         exit(-1);
     }
+
+    C = (t_matrix *)malloc(sizeof(t_matrix));
+
+    if (C == NULL)
+    {
+        printf("Erro: não foi possível alocar memória para a matriz C.\n");
+        exit(-1);
+    }
 }
 
 int main(int argc, char *argv[])
 {
+
     if (argc < 4)
     {
         printf("Use: <nome_arquivo_entrada1> <nome_arquivo_entrada2> <nome_arquivo_saida> <quantidade_threads>\n");
@@ -127,9 +174,11 @@ int main(int argc, char *argv[])
     }
 
     pthread_t *threads;
+    double start, end;
 
-    int rows_per_threads;
-    int n_threads = atoi(argv[4]);
+    GET_TIME(start);
+
+    n_threads = atoi(argv[4]);
 
     threads = (pthread_t *)malloc(n_threads * sizeof(pthread_t));
     if (threads == NULL)
@@ -142,16 +191,31 @@ int main(int argc, char *argv[])
 
     init_matrix(argv[1], A);
     init_matrix(argv[2], B);
-    // rows_per_threads = A->row / n_threads;
+    init_matrix(NULL, C);
+    init_matrix(NULL, sequential_matrix);
 
-    printf("A: %d %d\n", A->row, A->col);
-    printf("B: %d %d\n", B->row, B->col);
-    printf("Sequential: %d %d\n", sequential_matrix->row, sequential_matrix->col);
+    multiply_sequential_matrix();
 
-    // TODO: Implementar a multiplicação de matrizes paralela
+    int *thread_ids = (int *)malloc(sizeof(int) * n_threads);
+    if (thread_ids == NULL)
+    {
+        printf("Erro: não foi possível alocar memória para os ids das threads.\n");
+        exit(-1);
+    }
 
-    printf("oi\n");
+    for (int i = 0; i < n_threads; i++)
+    {
+        thread_ids[i] = i;
+        pthread_create(threads + i, NULL, multiply_concurrent_matrix, &thread_ids[i]);
+    }
 
+    for (int j = 0; j < n_threads; j++)
+        pthread_join(*(threads + j), NULL);
+
+    print_matrix(argv[3], C);
+    GET_TIME(end);
+
+    printf("Tempo de execução do programa: %.6f\n", end - start);
     free(threads);
     free(A);
     free(B);

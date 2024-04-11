@@ -1,0 +1,19 @@
+#!/bin/bash
+
+quantidade=2
+
+for ((i = 1; i <= quantidade; i++)); do
+    echo "Gerando matriz e salvando em binário para a matriz $i..."
+    gcc -o matrizbin geraMatrizBinario.c -Wall
+    ./matrizbin 5 5 output_bin
+
+    echo "Lendo matriz binário..."
+    gcc -o matriz leMatrizBinario.c -Wall
+    ./matriz output_bin > matriz$i
+
+    echo -e "Matriz $i gerada e resultado da leitura salvo em matriz$i\n"
+
+    echo "Removendo arquivos temporários..."
+    rm output_bin matriz matrizbin
+    echo -e "Arquivos removidos\n"
+done
