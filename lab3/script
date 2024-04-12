@@ -1,11 +1,9 @@
 #!/bin/bash
 
-quantidade=2
-
-for ((i = 1; i <= quantidade; i++)); do
+for ((i = 1; i <= 2; i++)); do
     echo "Gerando matriz e salvando em binário para a matriz $i..."
     gcc -o matrizbin geraMatrizBinario.c -Wall
-    ./matrizbin 5 5 output_bin
+    ./matrizbin $1 $1 output_bin
 
     echo "Lendo matriz binário..."
     gcc -o matriz leMatrizBinario.c -Wall
@@ -17,3 +15,17 @@ for ((i = 1; i <= quantidade; i++)); do
     rm output_bin matriz matrizbin
     echo -e "Arquivos removidos\n"
 done
+
+echo "Executando o programa de multiplicação de matrizes..."
+gcc -o out matrix.c -Wall -lpthread
+
+shift
+
+if ./out "$@"; then
+    echo -e "Programa executado e resultado salvo em output\n"
+else
+    echo "Erro ao executar o programa."
+    exit 1
+fi
+
+rm out 

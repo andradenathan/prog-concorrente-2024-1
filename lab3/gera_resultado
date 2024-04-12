@@ -1,0 +1,9 @@
+#!/bin/bash
+
+dimensao_matriz=(500 1000 2000)
+
+for dimensao in "${dimensao_matriz[@]}"; do
+    for ((i = 1; i <= 3; i++)); do
+        ./script $dimensao $@
+    done
+done

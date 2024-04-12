@@ -6,12 +6,11 @@
 #include "timer.h"
 
 /*
-    Estrutura de matriz para armazenar a matriz e as linhas e colunas.
-    Criada com o objetivo de facilitar a passagem por parâmetro entre as funções.
-
-    Optei por essa forma de implementação pois estava tendo alguns problemas de
-    acesso à memória com o uso somente de float** matrix.
+    Uso do programa: ./out <matriz1> <matriz2> <saida> <n_threads> <flag>
+    Flags disponíveis:
+        diff: compara a saída sequencial com a saída concorrente
 */
+
 typedef struct
 {
     int row;
@@ -46,14 +45,14 @@ void *multiply_concurrent_matrix(void *arg)
 
 void print_matrix(char *filename, t_matrix *matrix)
 {
-    file = fopen("output", "w");
+    file = fopen(filename, "w");
     for (int i = 0; i < matrix->row; i++)
     {
         for (int j = 0; j < matrix->col; j++)
         {
-            fprintf(stdout, "%.6f ", matrix->matrix[i][j]);
+            fprintf(file, "%.6f ", matrix->matrix[i][j]);
         }
-        fprintf(stdout, "\n");
+        fprintf(file, "\n");
     }
 
     fclose(file);
@@ -166,7 +165,6 @@ void allocate_mem_matrix()
 
 int main(int argc, char *argv[])
 {
-
     if (argc < 4)
     {
         printf("Use: <nome_arquivo_entrada1> <nome_arquivo_entrada2> <nome_arquivo_saida> <quantidade_threads>\n");
@@ -174,9 +172,7 @@ int main(int argc, char *argv[])
     }
 
     pthread_t *threads;
-    double start, end;
-
-    GET_TIME(start);
+    double start, end, elapsed_seq, elapsed_conc;
 
     n_threads = atoi(argv[4]);
 
@@ -192,10 +188,8 @@ int main(int argc, char *argv[])
     init_matrix(argv[1], A);
     init_matrix(argv[2], B);
     init_matrix(NULL, C);
-    init_matrix(NULL, sequential_matrix);
 
-    multiply_sequential_matrix();
-
+    GET_TIME(start);
     int *thread_ids = (int *)malloc(sizeof(int) * n_threads);
     if (thread_ids == NULL)
     {
@@ -209,13 +203,45 @@ int main(int argc, char *argv[])
         pthread_create(threads + i, NULL, multiply_concurrent_matrix, &thread_ids[i]);
     }
 
-    for (int j = 0; j < n_threads; j++)
-        pthread_join(*(threads + j), NULL);
+    for (int i = 0; i < n_threads; i++)
+        pthread_join(*(threads + i), NULL);
 
     print_matrix(argv[3], C);
     GET_TIME(end);
 
-    printf("Tempo de execução do programa: %.6f\n", end - start);
+    elapsed_conc = end - start;
+    printf("Tempo de execução do cálculo de matrizes com %d threads: %.6f\n", n_threads, elapsed_conc);
+
+    if (argv[5] != NULL && strcmp(argv[5], "diff") == 0)
+    {
+        start = 0;
+        end = 0;
+        GET_TIME(start);
+        init_matrix(NULL, sequential_matrix);
+        multiply_sequential_matrix();
+        print_matrix("output_sequential", sequential_matrix);
+        GET_TIME(end);
+
+        elapsed_seq = end - start;
+        printf("Tempo de execução do cálculo de matrizes sequencial: %.6f\n", elapsed_seq);
+
+        system("python3 ./diff.py");
+    }
+
+    file = fopen("result.csv", "a+");
+    if (file == NULL)
+    {
+        printf("Erro: não foi possível abrir o arquivo de resultados.\n");
+        exit(-1);
+    }
+    fseek(file, 0, SEEK_END);
+    if (ftell(file) == 0)
+    {
+        fprintf(file, "tempo_seq, tempo_conc, n_threads, n_linhas, n_colunas\n");
+    }
+
+    fprintf(file, "%.6f, %.6f, %d, %d, %d\n", elapsed_seq, elapsed_conc, n_threads, A->row, A->col);
+
     free(threads);
     free(A);
     free(B);
