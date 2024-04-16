@@ -10,6 +10,6 @@ def comparar_arquivos(arquivo1, arquivo2):
     
 if '__name__' == '__main__':
     if comparar_arquivos('output', 'output_sequential'):
-        print('Resultado:', None)
+        None
     else:
         print("As matrizes não são iguais.")
