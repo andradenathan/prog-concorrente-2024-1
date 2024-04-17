@@ -11,6 +11,7 @@
         diff: compara a saída sequencial com a saída concorrente
 */
 
+// Foi criado uma struct de matriz para facilitar a passagem de parâmetros.
 typedef struct
 {
     int row;
@@ -26,6 +27,8 @@ FILE *file;
 
 int n_threads;
 
+// Calcula a multiplicação de matriz concorrentemente divindo os indíces
+// em ids da thread e variando pelo número de threads.
 void *multiply_concurrent_matrix(void *arg)
 {
     int thread_id = *(int *)arg;
@@ -108,6 +111,9 @@ void fill_matrix(t_matrix *matrix, int fill_with_zeros)
     }
 }
 
+// Função para inicializar uma matriz. Caso o parâmetro file seja vazio
+// a intenção é criar uma matriz inicial com as dimensões de A e B, neste caso
+// para representar uma matriz resultado.
 void init_matrix(char *filename, t_matrix *matrix)
 {
     if (filename != NULL)
