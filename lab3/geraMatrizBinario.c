@@ -9,7 +9,6 @@
 #include <time.h>
 
 // descomentar o define abaixo caso deseje imprimir uma versao truncada da matriz gerada no formato texto
-#define TEXTO
 
 int main(int argc, char *argv[])
 {
@@ -45,12 +44,12 @@ int main(int argc, char *argv[])
         *(matriz + i) = (rand() % 1000) * 0.3;
     }
 
+// imprimir na saida padrao a matriz gerada
+#ifdef TEXTO
     fprintf(stdout, "%d ", linhas);
     fprintf(stdout, "%d ", colunas);
     fprintf(stdout, "\n");
 
-// imprimir na saida padrao a matriz gerada
-#ifdef TEXTO
     for (int i = 0; i < linhas; i++)
     {
         for (int j = 0; j < colunas; j++)

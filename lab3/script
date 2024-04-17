@@ -1,30 +1,53 @@
 #!/bin/bash
 
+if [[ "$*" == *INFO* ]]; then
+    INFO=true
+else
+    INFO=false
+fi
+
+# Função para exibir mensagens de informação se a flag INFO estiver presente
+info_echo() {
+    if [ "$INFO" = true ]; then
+        echo "$1"
+    fi
+}
+
 for ((i = 1; i <= 2; i++)); do
-    echo "Gerando matriz e salvando em binário para a matriz $i..."
-    gcc -o matrizbin geraMatrizBinario.c -Wall
+    info_echo "Gerando matriz e salvando em binário para a matriz $i..."
+    
+    if [ "$INFO" = true ]; then
+        gcc -o matrizbin geraMatrizBinario.c -Wall -DTEXTO=1
+    else
+        gcc -o matrizbin geraMatrizBinario.c -Wall
+    fi
+
     ./matrizbin $1 $1 output_bin
 
-    echo "Lendo matriz binário..."
+    info_echo "Lendo matriz binário..."
     gcc -o matriz leMatrizBinario.c -Wall
     ./matriz output_bin > matriz$i
 
-    echo -e "Matriz $i gerada e resultado da leitura salvo em matriz$i\n"
+    info_echo -e "Matriz $i gerada e resultado da leitura salvo em matriz$i\n"
 
-    echo "Removendo arquivos temporários..."
+    info_echo "Removendo arquivos temporários..."
     rm output_bin matriz matrizbin
-    echo -e "Arquivos removidos\n"
+    info_echo -e "Arquivos removidos\n"
 done
 
-echo "Executando o programa de multiplicação de matrizes..."
-gcc -o out matrix.c -Wall -lpthread
+info_echo "Executando o programa de multiplicação de matrizes..."
+if [ "$INFO" = true ]; then
+    gcc -o out matrix.c -Wall -lpthread -DINFO=1
+else
+    gcc -o out matrix.c -Wall -lpthread 
+fi
 
 shift
 
 if ./out "$@"; then
-    echo -e "Programa executado e resultado salvo em output\n"
+    info_echo -e "Programa executado e resultado salvo em output\n"
 else
-    echo "Erro ao executar o programa."
+    info_echo "Erro ao executar o programa."
     exit 1
 fi
 

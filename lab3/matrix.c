@@ -210,7 +210,10 @@ int main(int argc, char *argv[])
     GET_TIME(end);
 
     elapsed_conc = end - start;
-    printf("Tempo de execução do cálculo de matrizes com %d threads: %.6f\n", n_threads, elapsed_conc);
+
+#ifdef INFO
+    printf("Tempo de execução do cálculo de matrizes com %d thread(s): %.6f\n", n_threads, elapsed_conc);
+#endif
 
     if (argv[5] != NULL && strcmp(argv[5], "diff") == 0)
     {
@@ -219,13 +222,14 @@ int main(int argc, char *argv[])
         GET_TIME(start);
         init_matrix(NULL, sequential_matrix);
         multiply_sequential_matrix();
-        print_matrix("output_sequential", sequential_matrix);
         GET_TIME(end);
-
         elapsed_seq = end - start;
-        printf("Tempo de execução do cálculo de matrizes sequencial: %.6f\n", elapsed_seq);
+        print_matrix("output_sequential", sequential_matrix);
 
-        system("python3 ./diff.py");
+#ifdef INFO
+        printf("Tempo de execução do cálculo de matrizes sequencial: %.6f\n", elapsed_seq);
+#endif
+        system("python3 ./diff.py output output_sequential");
     }
 
     file = fopen("result.csv", "a+");
