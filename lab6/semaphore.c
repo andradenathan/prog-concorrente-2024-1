@@ -4,6 +4,7 @@
 #include <time.h>
 #include <semaphore.h>
 
+#define PROGRAM_ARGS_SIZE 4
 #define PRODUCERS 0
 #define CONSUMERS 0
 #define N 1000000
@@ -14,11 +15,64 @@ sem_t mutex_producer, mutex_consumer;
 int M;
 int *buffer;
 
-void *is_prime_number(void *args) {}
+typedef struct product_consumers_t
+{
+    int thread_id;
+    int is_prime;
+} product_consumers_t;
 
-void *producer(void *args) {}
+int is_prime(int number) {}
 
-void *consumer(void *args) {}
+void *producer(void *args)
+{
+    char *filename = (char *)args;
+    file = fopen(filename, "rb");
+
+    int integer;
+    static int in = 0;
+    for (int i = 0; i < N; i++)
+    {
+        sem_wait(&empty_slot);
+        sem_wait(&mutex_producer);
+
+        fread(&integer, sizeof(int), 1, file);
+
+        buffer[in] = integer;
+        in = (in + 1) % M;
+
+        sem_post(&mutex_producer);
+        sem_post(&full_slot);
+    }
+
+    fclose(file);
+    pthread_exit(NULL);
+}
+
+void *consumer(void *args)
+{
+    product_consumers_t *thread_args = (product_consumers_t *)args;
+    int integer;
+    static int out = 0;
+
+    for (int i = 0; i < N; i++)
+    {
+        sem_wait(&full_slot);
+        sem_wait(&mutex_consumer);
+
+        integer = buffer[out];
+        out = (out + 1) % M;
+
+        sem_post(&mutex_consumer);
+        sem_post(&empty_slot);
+
+        if (!is_prime(integer))
+            continue;
+
+        thread_args->is_prime++;
+    }
+
+    pthread_exit((void *)thread_args);
+}
 
 // Função helper para verificar se um ponteiro foi alocado corretamente.
 void check_memory_allocation(void *pointer, char *variable_name)
@@ -79,8 +133,9 @@ void read_bin_integers(int *numbers, char *filename)
 int main(int argc, char *argv[])
 {
     pthread_t *threads;
+    int n_threads_consumers;
 
-    if (argc < 4)
+    if (argc < PROGRAM_ARGS_SIZE)
     {
         fprintf(stderr, "Digite: %s <quantidade de threads consumidoras> "
                         "<tamanho M do buffer> <nome do arquivo de entrada>\n",
@@ -88,8 +143,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    int *int_sequence = malloc(sizeof(int) * N);
-    check_memory_allocation(int_sequence, "int_sequence");
+    n_threads_consumers = atoi(argv[1]);
 
     M = atoi(argv[2]);
 
@@ -97,22 +151,39 @@ int main(int argc, char *argv[])
     check_memory_allocation(buffer, "buffer");
 
     char *filename = argv[3];
-
     write_bin_integers(filename);
-
-    read_bin_integers(int_sequence, filename);
-
-    threads = malloc(sizeof(pthread_t) * (PRODUCERS + CONSUMERS));
-    check_memory_allocation(threads, "threads");
 
     sem_init(&mutex_consumer, 0, 1);
     sem_init(&mutex_producer, 0, 1);
     sem_init(&full_slot, 0, 0);
     sem_init(&empty_slot, 0, M);
 
-    // TODO: Implementar a parte do produtor e consumidor.
+    threads = malloc(sizeof(pthread_t) * (PRODUCERS + CONSUMERS));
+    check_memory_allocation(threads, "threads");
 
-    free(int_sequence);
+    if (pthread_create(&threads[0], NULL, producer, (void *)filename))
+    {
+        fprintf(stderr, "Erro ao criar a thread produtora\n");
+        return 2;
+    }
 
+    for (int index = 0; index < n_threads_consumers; index++)
+    {
+        product_consumers_t *args = malloc(sizeof(product_consumers_t));
+        args->thread_id = index;
+        args->is_prime = 0;
+        if (pthread_create(&threads[index + 1], NULL, consumer, (void *)args))
+        {
+            fprintf(stderr, "Erro ao criar a thread consumidora\n");
+            return 3;
+        }
+    }
+
+    sem_destroy(&mutex_consumer);
+    sem_destroy(&mutex_producer);
+    sem_destroy(&full_slot);
+    sem_destroy(&empty_slot);
+    free(buffer);
+    free(threads);
     return 0;
 }
