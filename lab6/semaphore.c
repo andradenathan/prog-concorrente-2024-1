@@ -6,57 +6,63 @@
 #include <semaphore.h>
 
 #define PROGRAM_ARGS_SIZE 4
-#define N 1000000
+#define N 100000
 
 FILE *file;
-sem_t full_slot, empty_slot;
-sem_t mutex;
+sem_t full_slot, empty_slot; // semáforo para representar buffer vazio e buffer cheio.
+sem_t mutex;                 // semáforo para realizar mutex (geral).
 int M;
 int *buffer;
-int primes;
+int primes; // número de primos total no arquivo calculado ao inserir os elementos.
 
-typedef struct product_consumers_t
+typedef struct consumers_t
 {
     int thread_id;
     int is_prime;
-} product_consumers_t;
+} consumers_t;
 
-int is_prime(int number)
+// Função que checa a primalidade de um determinado número.
+int is_prime(long long int number)
 {
     int i;
-    if (number <= 1)
+    if (number < 1)
         return 0;
 
-    for (i = 2; i < sqrt(number); i += 2)
-    {
+    if (number == 2)
+        return 1;
+
+    if (number % 2 == 0)
+        return 0;
+
+    for (i = 3; i < sqrt(number) + 1; i += 2)
         if (number % i == 0)
             return 0;
-    }
 
     return 1;
 }
 
+// Função para inserir um determinado número inteiro no buffer.
 void insert(long long int integer)
 {
     static int in = 0;
-    sem_wait(&empty_slot);
-    sem_wait(&mutex);
+    sem_wait(&empty_slot); // decrementa o semáforo de slots vazios
+    sem_wait(&mutex);      // realiza exclusão mútua
     buffer[in] = integer;
     in = (in + 1) % M;
-    sem_post(&mutex);
-    sem_post(&full_slot);
+    sem_post(&mutex);     // finaliza a exclusão mútua
+    sem_post(&full_slot); // libera a thread consumidora
 }
 
 long long int remove_integer()
 {
     int integer;
     static int out = 0;
-    sem_wait(&full_slot);
-    sem_wait(&mutex);
+    sem_wait(&full_slot); // aguarda o produtor inserir um valor
+    sem_wait(&mutex);     // realiza exclusão mútua
     integer = buffer[out];
     out = (out + 1) % M;
-    sem_post(&mutex);
-    sem_post(&empty_slot);
+    sem_post(&mutex);      // finaliza a exclusão mútua
+    sem_post(&empty_slot); // libera a thread produtora
     return integer;
 }
 
@@ -67,31 +73,38 @@ void *producer(void *args)
 
     int integer;
 
-    static int in = 0;
-    while (!feof(file))
-    {
-        fread(&integer, sizeof(int), 1, file);
+    // insere elementos no buffer enquanto tiver elementos no arquivo
+    while (fread(&integer, sizeof(int), 1, file))
         insert(integer);
-    }
 
-    free(args);
     fclose(file);
+
+    // insere o valor de -1 para que as threads consumidoras saiam do loop
+    for (int i = 0; i < M; i++)
+        insert(-1);
+
     pthread_exit(NULL);
 }
 
 void *consumer(void *args)
 {
-    product_consumers_t *thread_args = (product_consumers_t *)args;
-    int integer;
-    static int out = 0;
+    consumers_t *thread_args = (consumers_t *)args;
+    long long int integer;
 
-    for (int i = 0; i < N; i++)
+    while (1)
     {
         integer = remove_integer();
-        if (!is_prime(integer))
-            continue;
+        if (integer == -1)
+        {
+            // insere de volta o -1 para que outras threads consumidoras também possam sair
+            insert(-1);
+            break;
+        }
 
-        thread_args->is_prime++;
+        if (is_prime(integer))
+        {
+            thread_args->is_prime++;
+        }
     }
 
     pthread_exit((void *)thread_args);
@@ -162,7 +175,6 @@ int main(int argc, char *argv[])
     }
 
     n_threads_consumers = atoi(argv[1]);
-
     M = atoi(argv[2]);
 
     buffer = malloc(sizeof(int) * M);
@@ -187,7 +199,7 @@ int main(int argc, char *argv[])
 
     for (int index = 1; index <= n_threads_consumers; index++)
     {
-        product_consumers_t *args = malloc(sizeof(product_consumers_t));
+        consumers_t *args = malloc(sizeof(consumers_t));
         args->thread_id = index;
         args->is_prime = 0;
         if (pthread_create(&threads[index], NULL, consumer, (void *)args))
@@ -197,25 +209,23 @@ int main(int argc, char *argv[])
         }
     }
 
-    product_consumers_t *args = NULL;
+    consumers_t *args = NULL;
     int thread_computed_primes = 0;
 
-    for (int index = 0; index < n_threads_consumers; index++)
+    for (int index = 1; index <= n_threads_consumers; index++)
     {
-        if (pthread_join(threads[index + 1], (void **)&args))
+        if (pthread_join(threads[index], (void **)&args))
         {
             fprintf(stderr, "Erro ao esperar a thread consumidora\n");
             return 4;
         }
 
-        thread_computed_primes += args[index].is_prime;
+        thread_computed_primes += args->is_prime;
 
         printf(
             "Thread %d encontrou %d números primos\n",
             args->thread_id,
             args->is_prime);
-
-        free(args);
     }
 
     printf("O arquivo %s contém %d números primos\n", filename, primes);
@@ -224,6 +234,7 @@ int main(int argc, char *argv[])
     sem_destroy(&mutex);
     sem_destroy(&full_slot);
     sem_destroy(&empty_slot);
+    free(args);
     free(buffer);
     free(threads);
     return 0;
