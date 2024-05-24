@@ -1,19 +1,19 @@
 #include <pthread.h>
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 #include <time.h>
 #include <semaphore.h>
 
 #define PROGRAM_ARGS_SIZE 4
-#define PRODUCERS 0
-#define CONSUMERS 0
 #define N 1000000
 
 FILE *file;
 sem_t full_slot, empty_slot;
-sem_t mutex_producer, mutex_consumer;
+sem_t mutex;
 int M;
 int *buffer;
+int primes;
 
 typedef struct product_consumers_t
 {
@@ -21,7 +21,44 @@ typedef struct product_consumers_t
     int is_prime;
 } product_consumers_t;
 
-int is_prime(int number) {}
+int is_prime(int number)
+{
+    int i;
+    if (number <= 1)
+        return 0;
+
+    for (i = 2; i < sqrt(number); i += 2)
+    {
+        if (number % i == 0)
+            return 0;
+    }
+
+    return 1;
+}
+
+void insert(long long int integer)
+{
+    static int in = 0;
+    sem_wait(&empty_slot);
+    sem_wait(&mutex);
+    buffer[in] = integer;
+    in = (in + 1) % M;
+    sem_post(&mutex);
+    sem_post(&full_slot);
+}
+
+long long int remove_integer()
+{
+    int integer;
+    static int out = 0;
+    sem_wait(&full_slot);
+    sem_wait(&mutex);
+    integer = buffer[out];
+    out = (out + 1) % M;
+    sem_post(&mutex);
+    sem_post(&empty_slot);
+    return integer;
+}
 
 void *producer(void *args)
 {
@@ -29,21 +66,15 @@ void *producer(void *args)
     file = fopen(filename, "rb");
 
     int integer;
+
     static int in = 0;
-    for (int i = 0; i < N; i++)
+    while (!feof(file))
     {
-        sem_wait(&empty_slot);
-        sem_wait(&mutex_producer);
-
         fread(&integer, sizeof(int), 1, file);
-
-        buffer[in] = integer;
-        in = (in + 1) % M;
-
-        sem_post(&mutex_producer);
-        sem_post(&full_slot);
+        insert(integer);
     }
 
+    free(args);
     fclose(file);
     pthread_exit(NULL);
 }
@@ -56,15 +87,7 @@ void *consumer(void *args)
 
     for (int i = 0; i < N; i++)
     {
-        sem_wait(&full_slot);
-        sem_wait(&mutex_consumer);
-
-        integer = buffer[out];
-        out = (out + 1) % M;
-
-        sem_post(&mutex_consumer);
-        sem_post(&empty_slot);
-
+        integer = remove_integer();
         if (!is_prime(integer))
             continue;
 
@@ -99,35 +122,30 @@ void check_file_size(size_t file_size, long unsigned int expected_size, char *fi
 // Função para gerar os números aleatórios e inserir no arquivo binário.
 void write_bin_integers(char *filename)
 {
-    int *integers;
+    long long int *integers;
     size_t file_size;
 
-    integers = (int *)malloc(sizeof(int) * N);
+    integers = (long long int *)malloc(sizeof(long long int) * N);
     check_memory_allocation(integers, "integers");
 
     srand(time(NULL));
-    for (int index = 0; index < N; index++)
+    for (long long int index = 0; index < N; index++)
     {
         integers[index] = rand() % N;
+        if (is_prime(integers[index]))
+        {
+            primes++;
+        }
     }
 
     file = fopen(filename, "wb");
     check_memory_allocation(file, "file");
 
-    file_size = fwrite(integers, sizeof(int), N, file);
+    file_size = fwrite(integers, sizeof(long long int), N, file);
     check_file_size(file_size, N, filename);
 
     fclose(file);
     free(integers);
-}
-
-// Função para ler os números inteiros do arquivo binário.
-void read_bin_integers(int *numbers, char *filename)
-{
-    size_t file_size;
-    file = fopen(filename, "rb");
-    file_size = fread(numbers, sizeof(int), N, file);
-    check_file_size(file_size, N, filename);
 }
 
 int main(int argc, char *argv[])
@@ -153,12 +171,12 @@ int main(int argc, char *argv[])
     char *filename = argv[3];
     write_bin_integers(filename);
 
-    sem_init(&mutex_consumer, 0, 1);
-    sem_init(&mutex_producer, 0, 1);
-    sem_init(&full_slot, 0, 0);
-    sem_init(&empty_slot, 0, M);
+    // inicializa os semáforos
+    sem_init(&mutex, 0, 1);      // semáforo binário de exclusão mútua
+    sem_init(&full_slot, 0, 0);  // semáforo indicador de buffer cheio
+    sem_init(&empty_slot, 0, M); // semáforo indicador de buffer vazio
 
-    threads = malloc(sizeof(pthread_t) * (PRODUCERS + CONSUMERS));
+    threads = malloc(sizeof(pthread_t) * (1 + n_threads_consumers));
     check_memory_allocation(threads, "threads");
 
     if (pthread_create(&threads[0], NULL, producer, (void *)filename))
@@ -167,20 +185,43 @@ int main(int argc, char *argv[])
         return 2;
     }
 
-    for (int index = 0; index < n_threads_consumers; index++)
+    for (int index = 1; index <= n_threads_consumers; index++)
     {
         product_consumers_t *args = malloc(sizeof(product_consumers_t));
         args->thread_id = index;
         args->is_prime = 0;
-        if (pthread_create(&threads[index + 1], NULL, consumer, (void *)args))
+        if (pthread_create(&threads[index], NULL, consumer, (void *)args))
         {
             fprintf(stderr, "Erro ao criar a thread consumidora\n");
             return 3;
         }
     }
 
-    sem_destroy(&mutex_consumer);
-    sem_destroy(&mutex_producer);
+    product_consumers_t *args = NULL;
+    int thread_computed_primes = 0;
+
+    for (int index = 0; index < n_threads_consumers; index++)
+    {
+        if (pthread_join(threads[index + 1], (void **)&args))
+        {
+            fprintf(stderr, "Erro ao esperar a thread consumidora\n");
+            return 4;
+        }
+
+        thread_computed_primes += args[index].is_prime;
+
+        printf(
+            "Thread %d encontrou %d números primos\n",
+            args->thread_id,
+            args->is_prime);
+
+        free(args);
+    }
+
+    printf("O arquivo %s contém %d números primos\n", filename, primes);
+    printf("Número total de primos encontrados pelas threads: %d\n", thread_computed_primes);
+
+    sem_destroy(&mutex);
     sem_destroy(&full_slot);
     sem_destroy(&empty_slot);
     free(buffer);
